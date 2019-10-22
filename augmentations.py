@@ -1,4 +1,7 @@
 import PIL.Image
+import numpy as np
+import cv2
+import torchvision
 
 def ElasticTransformations(alpha, sigma, random_state=np.random.RandomState(42)):
     """Returns a function to elastically transform multiple images."""

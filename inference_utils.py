@@ -1,4 +1,11 @@
 import math
+import numpy as np
+import torch
+import torch.nn.functional as F
+import scipy.ndimage
+import skimage.measure
+import PIL
+
 def resize_image(image):
     ratio = (775 / 512)
     new_size = (int(round(image.size[0] / ratio)), 
@@ -29,22 +36,20 @@ def crop_result(result, image):
     pad_h = (math.floor(pad_h), math.ceil(pad_h))
     pad_w = (math.floor(pad_w), math.ceil(pad_w))
     
-    result = result[pad_h[0]:result.shape[0] - pad_h[1],
-                    pad_w[0]:result.shape[1] - pad_w[1]]
+    result = result[:,
+                    pad_h[0]:result.shape[1] - pad_h[1],
+                    pad_w[0]:result.shape[2] - pad_w[1]]
     return result
 
-def inference_image(image, unet=False):
+def inference_image(net, image, shouldpad=False):
     input_image, resized = prepare_image(image)
-    result = eval_image(input_image, shouldpad=unet)
-    result = np.argmax(result, axis=2)
+    result = eval_image(net, input_image, shouldpad=shouldpad)
     result = crop_result(result, resized)
     return result, resized
 
-def eval_image(tile, TTA=False, resize=1, patch_size=512, shouldpad=False):
+def eval_image(net, tile, TTA=True, resize=1, patch_size=512, shouldpad=False):
     net.eval();
     with torch.no_grad():
-        
-        # we should pad if the network is UNet
         if shouldpad:
             pad = 192
             padded_np_image = np.pad(tile, ((pad//2, pad//2), (pad//2, pad//2), (0, 0)), mode='reflect')
@@ -54,7 +59,7 @@ def eval_image(tile, TTA=False, resize=1, patch_size=512, shouldpad=False):
         transposed_image = tile.transpose(2, 0, 1) / 255
         transposed_image_ud = np.flipud(tile).transpose(2, 0, 1) / 255
         transposed_image_lr = np.fliplr(tile).transpose(2, 0, 1) / 255
-
+        
         torch_image = torch.from_numpy(transposed_image).float()
         torch_image_ud = torch.from_numpy(transposed_image_ud).float()
         torch_image_lr = torch.from_numpy(transposed_image_lr).float()
@@ -62,24 +67,27 @@ def eval_image(tile, TTA=False, resize=1, patch_size=512, shouldpad=False):
         result = net(torch_image[None].cuda())
         result_ud = net(torch_image_ud[None].cuda())
         result_lr = net(torch_image_lr[None].cuda())
-    
-        soft_result = F.softmax(result[0], dim=1).cpu()
-        soft_result_ud = F.softmax(result_ud[0], dim=1).cpu()
-        soft_result_lr = F.softmax(result_lr[0], dim=1).cpu()
+
+        soft_result = torch.sigmoid(result)[0].cpu()
+        soft_result_ud = torch.sigmoid(result_ud)[0].cpu()
+        soft_result_lr = torch.sigmoid(result_lr)[0].cpu()
 
         soft_result_np = soft_result.detach().numpy().transpose(1, 2, 0)
         soft_result_np_ud = soft_result_ud.detach().numpy().transpose(1, 2, 0)
         soft_result_np_lr = soft_result_lr.detach().numpy().transpose(1, 2, 0)
+        
+        if shouldpad: soft_result_np = soft_result_np
+        if shouldpad: soft_result_np_ud = soft_result_np_ud
+        if shouldpad: soft_result_np_lr = soft_result_np_lr
 
         soft_result_np_ud = np.flipud(soft_result_np_ud)
         soft_result_np_lr = np.fliplr(soft_result_np_lr)
+        soft_result_np_lr_ud = np.fliplr(np.flipud(soft_result_np_lr)) # incorrect
 
         if TTA: soft_result_np = (soft_result_np + soft_result_np_ud + soft_result_np_lr) / 3
 
-        if shouldpad: 
-            soft_result_np = soft_result_np[2:-2,2:-2]
-            
-        return soft_result_np
+        if shouldpad: soft_result_np = soft_result_np[2:-2,2:-2]
+        return soft_result_np.transpose(2, 0, 1)
 
 def split_objects(image):
     return (image[0] > 0.7)
@@ -111,14 +119,14 @@ def hole_filling_per_object(image):
     return grow_labeled
 
 def resize_to_size(image, gt):
-    new_results_img = Image.fromarray(image.squeeze().astype(np.uint8))
+    new_results_img = PIL.Image.fromarray(image.squeeze().astype(np.uint8))
     new_results_img = new_results_img.resize(gt.size)
     new_results_img = np.array(new_results_img)
     return new_results_img
 
 def postprocess(result, image):
     splitted = split_objects(result)
-    labeled = label(np.array(splitted))
+    labeled = skimage.measure.label(np.array(splitted))
     temp = remove_small_object(labeled, threshold=500)
     growed = grow_to_fill_borders(temp, result[1] > 0.5)
     hole_filled = hole_filling_per_object(growed)

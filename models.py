@@ -90,43 +90,43 @@ class ConvODEUNet(nn.Module):
 
         features1 = self.odeblock_down1(x)  # 512
         x = self.non_linearity(self.conv_down1_2(features1))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         features2 = self.odeblock_down2(x)  # 256
         x = self.non_linearity(self.conv_down2_3(features2))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         features3 = self.odeblock_down3(x)  # 128
         x = self.non_linearity(self.conv_down3_4(features3))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         features4 = self.odeblock_down4(x)  # 64
         x = self.non_linearity(self.conv_down4_embed(features4))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         x = self.odeblock_embedding(x)  # 32
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features4), dim=1)
         x = self.non_linearity(self.conv_up_embed_1(x))
         x = self.odeblock_up1(x)
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features3), dim=1)
         x = self.non_linearity(self.conv_up1_2(x))
         x = self.odeblock_up2(x)
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features2), dim=1)
         x = self.non_linearity(self.conv_up2_3(x))
         x = self.odeblock_up3(x)
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features1), dim=1)
         x = self.non_linearity(self.conv_up3_4(x))
         x = self.odeblock_up4(x)
 
-        pred = self.classifier(x).view(x.size(0), x.size(2), x.size(3))
+        pred = self.classifier(x)
         return pred
 
 
@@ -135,7 +135,7 @@ class ConvResFunc(nn.Module):
         super(ConvResFunc, self).__init__()
 
         self.conv1 = nn.Conv2d(nf, nf, kernel_size=3, stride=1, padding=1)
-        self.norm = nn.InstanceNorm2d(2, self.num_filters)
+        self.norm = nn.InstanceNorm2d(2, nf)
         self.conv2 = nn.Conv2d(nf, nf, kernel_size=3, stride=1, padding=1)
 
         self.non_linearity = get_nonlinearity(non_linearity)
@@ -151,32 +151,31 @@ class ConvResFunc(nn.Module):
         return out
 
 class ConvResUNet(nn.Module):
-    def __init__(self, device, num_filters, output_dim=1, non_linearity='softplus'):
+    def __init__(self, num_filters, output_dim=1, non_linearity='softplus'):
         super(ConvResUNet, self).__init__()
-        self.device = device
         self.output_dim = output_dim
 
         self.input_1x1 = nn.Conv2d(3, num_filters, 1, 1)
 
-        self.block_down1 = ConvResFunc(device, num_filters, non_linearity)
+        self.block_down1 = ConvResFunc(num_filters, non_linearity)
         self.conv_down1_2 = nn.Conv2d(num_filters, num_filters*2, 1, 1)
-        self.block_down2 = ConvResFunc(device, num_filters*2, non_linearity)
+        self.block_down2 = ConvResFunc(num_filters*2, non_linearity)
         self.conv_down2_3 = nn.Conv2d(num_filters*2, num_filters*4, 1, 1)
-        self.block_down3 = ConvResFunc(device, num_filters*4, non_linearity)
+        self.block_down3 = ConvResFunc(num_filters*4, non_linearity)
         self.conv_down3_4 = nn.Conv2d(num_filters*4, num_filters*8, 1, 1)
-        self.block_down4 = ConvResFunc(device, num_filters*8, non_linearity)
+        self.block_down4 = ConvResFunc(num_filters*8, non_linearity)
         self.conv_down4_embed = nn.Conv2d(num_filters*8, num_filters*16, 1, 1)
 
-        self.block_embedding = ConvResFunc(device, num_filters*16, non_linearity)
+        self.block_embedding = ConvResFunc(num_filters*16, non_linearity)
 
         self.conv_up_embed_1 = nn.Conv2d(num_filters*16+num_filters*8, num_filters*8, 1, 1)
-        self.block_up1 = ConvResFunc(device, num_filters*8, non_linearity)
+        self.block_up1 = ConvResFunc(num_filters*8, non_linearity)
         self.conv_up1_2 = nn.Conv2d(num_filters*8+num_filters*4, num_filters*4, 1, 1)
-        self.block_up2 = ConvResFunc(device, num_filters*4, non_linearity)
+        self.block_up2 = ConvResFunc(num_filters*4, non_linearity)
         self.conv_up2_3 = nn.Conv2d(num_filters*4+num_filters*2, num_filters*2, 1, 1)
-        self.block_up3 = ConvResFunc(device, num_filters*2, non_linearity)
+        self.block_up3 = ConvResFunc(num_filters*2, non_linearity)
         self.conv_up3_4 = nn.Conv2d(num_filters*2+num_filters, num_filters, 1, 1)
-        self.block_up4 = ConvResFunc(device, num_filters, non_linearity)
+        self.block_up4 = ConvResFunc(num_filters, non_linearity)
 
         self.classifier = nn.Conv2d(num_filters, self.output_dim, 1)
 
@@ -187,38 +186,38 @@ class ConvResUNet(nn.Module):
 
         features1 = self.block_down1(x)  # 512
         x = self.non_linearity(self.conv_down1_2(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         features2 = self.block_down2(x)  # 256
         x = self.non_linearity(self.conv_down2_3(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         features3 = self.block_down3(x)  # 128
         x = self.non_linearity(self.conv_down3_4(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         features4 = self.block_down4(x)  # 64
         x = self.non_linearity(self.conv_down4_embed(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear', align_corners=False)
 
         x = self.block_embedding(x)  # 32
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features4), dim=1)
         x = self.non_linearity(self.conv_up_embed_1(x))
         x = self.block_up1(x)
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features3), dim=1)
         x = self.non_linearity(self.conv_up1_2(x))
         x = self.block_up2(x)
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features2), dim=1)
         x = self.non_linearity(self.conv_up2_3(x))
         x = self.block_up3(x)
 
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
+        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
         x = torch.cat((x, features1), dim=1)
         x = self.non_linearity(self.conv_up3_4(x))
         x = self.block_up4(x)
@@ -307,79 +306,3 @@ class ConvFunc(nn.Module):
         out = self.non_linearity(out)
         return out
 
-class UNetTwoUp(nn.Module):
-    def __init__(self, device, num_filters, output_dim=1, non_linearity='relu'):
-        super(ConvResUNet, self).__init__()
-        self.device = device
-        self.output_dim = output_dim
-
-        self.input_1x1 = nn.Conv2d(3, num_filters, 1, 1)
-
-        self.block_down1 = ConvFunc(device, num_filters, non_linearity)
-        self.conv_down1_2 = nn.Conv2d(num_filters, num_filters*2, 1, 1)
-        self.block_down2 = ConvFunc(device, num_filters*2, non_linearity)
-        self.conv_down2_3 = nn.Conv2d(num_filters*2, num_filters*4, 1, 1)
-        self.block_down3 = ConvFunc(device, num_filters*4, non_linearity)
-        self.conv_down3_4 = nn.Conv2d(num_filters*4, num_filters*8, 1, 1)
-        self.block_down4 = ConvFunc(device, num_filters*8, non_linearity)
-        self.conv_down4_embed = nn.Conv2d(num_filters*8, num_filters*16, 1, 1)
-
-        self.block_embedding = ConvFunc(device, num_filters*16, non_linearity)
-
-        # First path
-        self.conv_up_embed_1 = nn.Conv2d(num_filters*16+num_filters*8, num_filters*8, 1, 1)
-        self.block_up1 = ConvFunc(device, num_filters*8, non_linearity)
-        self.conv_up1_2 = nn.Conv2d(num_filters*8+num_filters*4, num_filters*4, 1, 1)
-        self.block_up2 = ConvFunc(device, num_filters*4, non_linearity)
-        self.conv_up2_3 = nn.Conv2d(num_filters*4+num_filters*2, num_filters*2, 1, 1)
-        self.block_up3 = ConvFunc(device, num_filters*2, non_linearity)
-        self.conv_up3_4 = nn.Conv2d(num_filters*2+num_filters, num_filters, 1, 1)
-        self.block_up4 = ConvFunc(device, num_filters, non_linearity)
-
-        self.classifier = nn.Conv2d(num_filters, self.output_dim, 1)
-
-        self.non_linearity = get_nonlinearity(non_linearity)
-
-    def forward(self, x, return_features=False):
-        x = self.non_linearity(self.input_1x1(x))
-
-        features1 = self.block_down1(x)  # 512
-        x = self.non_linearity(self.conv_down1_2(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
-
-        features2 = self.block_down2(x)  # 256
-        x = self.non_linearity(self.conv_down2_3(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
-
-        features3 = self.block_down3(x)  # 128
-        x = self.non_linearity(self.conv_down3_4(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
-
-        features4 = self.block_down4(x)  # 64
-        x = self.non_linearity(self.conv_down4_embed(x))
-        x = nn.functional.interpolate(x, scale_factor=0.5, mode='bilinear')
-
-        x = self.block_embedding(x)  # 32
-
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
-        x = torch.cat((x, features4), dim=1)
-        x = self.non_linearity(self.conv_up_embed_1(x))
-        x = self.block_up1(x)
-
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
-        x = torch.cat((x, features3), dim=1)
-        x = self.non_linearity(self.conv_up1_2(x))
-        x = self.block_up2(x)
-
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
-        x = torch.cat((x, features2), dim=1)
-        x = self.non_linearity(self.conv_up2_3(x))
-        x = self.block_up3(x)
-
-        x = nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
-        x = torch.cat((x, features1), dim=1)
-        x = self.non_linearity(self.conv_up3_4(x))
-        x = self.block_up4(x)
-
-        pred = self.classifier(x)
-        return pred
