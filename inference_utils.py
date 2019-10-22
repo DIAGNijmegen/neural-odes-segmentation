@@ -80,3 +80,48 @@ def eval_image(tile, TTA=False, resize=1, patch_size=512, shouldpad=False):
             soft_result_np = soft_result_np[2:-2,2:-2]
             
         return soft_result_np
+
+def split_objects(image):
+    return (image[0] > 0.7)
+
+def remove_small_object(labeled_image, threshold=500):
+    regionprops = skimage.measure.regionprops(labeled_image)
+    new_results = np.array(labeled_image).copy()
+    for prop in regionprops:
+        if prop.area < threshold:
+            new_results[new_results == prop.label] = 0
+    return new_results
+
+def grow_to_fill_borders(image, result):
+    grow_labeled = image
+
+    for i in range(10):
+        new_labeled = scipy.ndimage.maximum_filter(grow_labeled, 3)
+        grow_labeled[result==1] = new_labeled[result==1]
+    grow_labeled[result==0] = 0
+    return grow_labeled
+
+def hole_filling_per_object(image):
+    grow_labeled = image
+    for i in np.unique(grow_labeled):
+        if i == 0: continue
+        filled = scipy.ndimage.morphology.binary_fill_holes(grow_labeled == i)
+        grow_labeled[grow_labeled == i] = 0
+        grow_labeled[filled == 1] = i
+    return grow_labeled
+
+def resize_to_size(image, gt):
+    new_results_img = Image.fromarray(image.squeeze().astype(np.uint8))
+    new_results_img = new_results_img.resize(gt.size)
+    new_results_img = np.array(new_results_img)
+    return new_results_img
+
+def postprocess(result, image):
+    splitted = split_objects(result)
+    labeled = label(np.array(splitted))
+    temp = remove_small_object(labeled, threshold=500)
+    growed = grow_to_fill_borders(temp, result[1] > 0.5)
+    hole_filled = hole_filling_per_object(growed)
+    temp = remove_small_object(hole_filled, threshold=500)
+    final = resize_to_size(temp, image)
+    return final
