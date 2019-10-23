@@ -16,7 +16,7 @@ memory load and parameter counts.
 
 This reposity contains the code to reproduce the experiments from our paper. 
 
-*Tip: start with [the notebook](train_models.ipynb)*
+**Tip: start with [the notebook](train_models.ipynb)**
 
 [ArXiv link]()
 
