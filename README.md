@@ -1,5 +1,7 @@
 # Neural Ordinary Differential Equations for Semantic Segmentation
 
+*Accepted to Medical Imaging meets NeurIPS workshop at NeurIPS 2019*
+
 Automated medical image segmentation plays a key role in quantitative research
 and diagnostics. Convolutional neural networks based on the U-Net architecture are
 the state-of-the-art. A key disadvantage is the hard-coding of the receptive field size,
@@ -13,6 +15,8 @@ used within the U-Net framework to improve segmentation results while reducing
 memory load and parameter counts.
 
 This reposity contains the code to reproduce the experiments from our paper. 
+
+*Tip: start with [the notebook](train_models.ipynb)*
 
 [ArXiv link]()
 
@@ -36,7 +40,7 @@ equivalent to U-Node except for the ODE blocks.
 
 ## Results
 
-![Example patches of the test set](results.svg)
+![Example patches of the test set](results.png)
 
 Example patches of the test set with clear differences between the models. Each color denotes a
 gland. The black bar denotes the receptive field. NFE denotes the number of function evaluations in the network.
