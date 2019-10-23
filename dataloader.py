@@ -1,0 +1,108 @@
+import random
+
+from augmentations import ElasticTransformations, RandomRotationWithMask
+
+import cv2
+import PIL
+import torch
+import numpy as np
+import torchvision
+import scipy.ndimage
+
+cv2.setNumThreads(0)
+
+class GLaSDataLoader(object):
+    def __init__(self, patch_size, dataset_repeat=1, images=np.arange(0, 70), validation=False):
+        self.image_fname = 'Warwick QU Dataset (Released 2016_07_08)/train_'
+        self.images = images
+
+        self.patch_size = patch_size
+        self.repeat = dataset_repeat
+        self.validation = validation
+
+        self.image_mask_transforms = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.RandomHorizontalFlip(),
+            torchvision.transforms.RandomVerticalFlip(),
+            RandomRotationWithMask(45, resample=False, expand=False, center=None),
+            ElasticTransformations(2000, 60),
+            torchvision.transforms.ToTensor()
+        ])
+        self.image_transforms = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.ColorJitter(brightness=0.3, contrast=0.2, saturation=0.1, hue=0.1),
+            torchvision.transforms.ToTensor()
+        ])
+
+    def __getitem__(self, index):
+        # index to image index
+        index_img = index // self.repeat
+        index_img = self.images[index_img]
+        index_str = str(index_img.item() + 1)
+
+        image = self.image_fname + index_str + '.bmp'
+        mask = self.image_fname + index_str + '_anno.bmp'
+
+        image = PIL.Image.open(image)
+        ratio = (775 / 512)
+        new_size = (int(round(image.size[0] / ratio)),
+                    int(round(image.size[1] / ratio)))
+
+        image = image.resize(new_size)
+
+        mask = PIL.Image.open(mask)
+        mask = mask.resize(new_size)
+
+        image = np.array(image)
+        mask = np.array(mask)
+
+        if not self.validation:
+            pad_h = max(self.patch_size[0] - image.shape[0], 128)
+            pad_w = max(self.patch_size[1] - image.shape[1], 128)  # pad to image size
+        else:
+            pad_h = max((self.patch_size[0] - image.shape[0]) // 2 + 1, 0)
+            pad_w = max((self.patch_size[1] - image.shape[1]) // 2 + 1, 0)
+
+        # pad to image size
+        padded_image = np.pad(image, ((pad_h, pad_h), (pad_w, pad_w), (0, 0)), mode='reflect')
+        mask = np.pad(mask, ((pad_h, pad_h), (pad_w, pad_w)), mode='reflect')
+
+        if not self.validation:
+            loc_y = random.randint(0, padded_image.shape[0] - self.patch_size[0])
+            loc_x = random.randint(0, padded_image.shape[1] - self.patch_size[1])
+        else:
+            loc_y, loc_x = 0, 0
+
+        patch = torch.from_numpy(padded_image.transpose(2, 0, 1)).float() / 255
+        n_glands = mask.max()
+        label = torch.from_numpy(mask).float() / n_glands
+
+        if not self.validation:
+            patch_label_concat = torch.cat((patch, label[None, :, :].float()))
+            patch_label_concat = self.image_mask_transforms(patch_label_concat)
+            patch, label = patch_label_concat[0:3], np.round(patch_label_concat[3] * n_glands)
+            patch = self.image_transforms(patch)
+        else:
+            label *= n_glands
+
+        boundaries = torch.zeros(label.shape)
+        for i in np.unique(mask):
+            if i == 0: continue
+            gland_mask = (label == i).float()
+            binarized_mask_border = scipy.ndimage.morphology.binary_erosion(gland_mask,
+                                                                            structure=np.ones((13, 13)),
+                                                                            border_value=1)
+
+            binarized_mask_border = torch.from_numpy(binarized_mask_border.astype(np.float32))
+            boundaries[label == i] = binarized_mask_border[label == i]
+
+        label = (label > 0).float()
+        label = torch.stack((boundaries, label))
+
+        patch = patch[:, loc_y:loc_y+self.patch_size[0], loc_x:loc_x+self.patch_size[1]]
+        label = label[:, loc_y:loc_y+self.patch_size[0], loc_x:loc_x+self.patch_size[1]]
+
+        return patch, label.float()
+
+    def __len__(self):
+        return len(self.images) * self.repeat

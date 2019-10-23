@@ -1,4 +1,5 @@
-# GlaS metrics, translated from the official Matlab code.
+# GlaS metrics, translated from the official Matlab code:
+# https://warwick.ac.uk/fac/sci/dcs/research/tia/glascontest/evaluation/evaluation_v6.zip
 #
 
 import numpy as np

@@ -5,8 +5,17 @@ import torch.nn as nn
 
 
 class ConvODEFunc(nn.Module):
-    def __init__(self, nf, time_dependent=False, non_linearity='relu'):
+    def __init__(self, num_filters, time_dependent=False, non_linearity='relu'):
+        """
+        Block for ConvODEUNet
+
+        Args:
+            num_filters (int): number of filters for the conv layers
+            time_dependent (bool): whether to concat the time as a feature map before the convs
+            non_linearity (str): which non_linearity to use (for options see get_nonlinearity)
+        """
         super(ConvODEFunc, self).__init__()
+        nf = num_filters
         self.time_dependent = time_dependent
         self.nfe = 0  # Number of function evaluations
 
@@ -22,66 +31,69 @@ class ConvODEFunc(nn.Module):
 
     def forward(self, t, x):
         self.nfe += 1
-        if self.time_dependent:
-            out = self.norm(x)
-            out = self.conv1(t, x)
-            out = self.non_linearity(out)
-            out = self.norm(out)
-            out = self.conv2(t, out)
-            out = self.non_linearity(out)
-        else:
-            out = self.norm(x)
-            out = self.conv1(out)
-            out = self.non_linearity(out)
-            out = self.norm(out)
-            out = self.conv2(out)
-            out = self.non_linearity(out)
+        out = self.norm(x)
+        out = self.conv1(t, out) if self.time_dependent else self.conv1(out)
+        out = self.non_linearity(out)
+        out = self.norm(out)
+        out = self.conv2(t, out) if self.time_dependent else self.conv2(out)
+        out = self.non_linearity(out)
         return out
 
 class ConvODEUNet(nn.Module):
     def __init__(self, num_filters, output_dim=1, time_dependent=False,
                  non_linearity='softplus', tol=1e-3, adjoint=False):
+        """
+        ConvODEUNet (U-Node in paper)
+
+        Args:
+            num_filters (int): number of filters for first conv layer
+            output_dim (int): how many feature maps the network outputs
+            time_dependent (bool): whether to concat the time as a feature map before the convs
+            non_linearity (str): which non_linearity to use (for options see get_nonlinearity)
+            tol (float): tolerance to be used for ODE solver
+            adjoint (bool): whether to use the adjoint method to calculate the gradients
+        """
         super(ConvODEUNet, self).__init__()
         nf = num_filters
 
-        self.input_1x1 = nn.Conv2d(3, num_filters, 1, 1)
+        self.input_1x1 = nn.Conv2d(3, nf, 1, 1)
 
         ode_down1 = ConvODEFunc(nf, time_dependent, non_linearity)
         self.odeblock_down1 = ODEBlock(ode_down1, tol=tol, adjoint=adjoint)
-        self.conv_down1_2 = nn.Conv2d(num_filters, num_filters*2, 1, 1)
+        self.conv_down1_2 = nn.Conv2d(nf, nf*2, 1, 1)
 
         ode_down2 = ConvODEFunc(nf*2, time_dependent, non_linearity)
         self.odeblock_down2 = ODEBlock(ode_down2, tol=tol, adjoint=adjoint)
-        self.conv_down2_3 = nn.Conv2d(num_filters*2, num_filters*4, 1, 1)
+        self.conv_down2_3 = nn.Conv2d(nf*2, nf*4, 1, 1)
 
         ode_down3 = ConvODEFunc(nf*4, time_dependent, non_linearity)
         self.odeblock_down3 = ODEBlock(ode_down3, tol=tol, adjoint=adjoint)
-        self.conv_down3_4 = nn.Conv2d(num_filters*4, num_filters*8, 1, 1)
+        self.conv_down3_4 = nn.Conv2d(nf*4, nf*8, 1, 1)
 
         ode_down4 = ConvODEFunc(nf*8, time_dependent, non_linearity)
         self.odeblock_down4 = ODEBlock(ode_down4,  tol=tol, adjoint=adjoint)
-        self.conv_down4_embed = nn.Conv2d(num_filters*8, num_filters*16, 1, 1)
+        self.conv_down4_embed = nn.Conv2d(nf*8, nf*16, 1, 1)
 
         ode_embed = ConvODEFunc(nf*16, time_dependent, non_linearity)
         self.odeblock_embedding = ODEBlock(ode_embed,  tol=tol, adjoint=adjoint)
 
-        self.conv_up_embed_1 = nn.Conv2d(num_filters*16+num_filters*8, num_filters*8, 1, 1)
+        self.conv_up_embed_1 = nn.Conv2d(nf*16+nf*8, nf*8, 1, 1)
         ode_up1 = ConvODEFunc(nf*8, time_dependent, non_linearity)
         self.odeblock_up1 = ODEBlock(ode_up1, tol=tol, adjoint=adjoint)
 
-        self.conv_up1_2 = nn.Conv2d(num_filters*8+num_filters*4, num_filters*4, 1, 1)
+        self.conv_up1_2 = nn.Conv2d(nf*8+nf*4, nf*4, 1, 1)
         ode_up2 = ConvODEFunc(nf*4, time_dependent, non_linearity)
         self.odeblock_up2 = ODEBlock(ode_up2, tol=tol, adjoint=adjoint)
 
-        self.conv_up2_3 = nn.Conv2d(num_filters*4+num_filters*2, num_filters*2, 1, 1)
+        self.conv_up2_3 = nn.Conv2d(nf*4+nf*2, nf*2, 1, 1)
         ode_up3 = ConvODEFunc(nf*2, time_dependent, non_linearity)
         self.odeblock_up3 = ODEBlock(ode_up3, tol=tol, adjoint=adjoint)
 
-        self.conv_up3_4 = nn.Conv2d(num_filters*2+num_filters, num_filters, 1, 1)
+        self.conv_up3_4 = nn.Conv2d(nf*2+nf, nf, 1, 1)
         ode_up4 = ConvODEFunc(nf, time_dependent, non_linearity)
         self.odeblock_up4 = ODEBlock(ode_up4, tol=tol, adjoint=adjoint)
 
-        self.classifier = nn.Conv2d(num_filters, output_dim, 1)
+        self.classifier = nn.Conv2d(nf, output_dim, 1)
 
         self.non_linearity = get_nonlinearity(non_linearity)
 
@@ -131,12 +143,19 @@ class ConvODEUNet(nn.Module):
 
 
 class ConvResFunc(nn.Module):
-    def __init__(self, nf, non_linearity='relu'):
+    def __init__(self, num_filters, non_linearity='relu'):
+        """
+        Block for ConvResUNet
+
+        Args:
+            num_filters (int): number of filters for the conv layers
+            non_linearity (str): which non_linearity to use (for options see get_nonlinearity)
+        """
         super(ConvResFunc, self).__init__()
 
-        self.conv1 = nn.Conv2d(nf, nf, kernel_size=3, stride=1, padding=1)
-        self.norm = nn.InstanceNorm2d(2, nf)
-        self.conv2 = nn.Conv2d(nf, nf, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(num_filters, num_filters, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.InstanceNorm2d(2, num_filters)
+        self.conv2 = nn.Conv2d(num_filters, num_filters, kernel_size=3, stride=1, padding=1)
 
         self.non_linearity = get_nonlinearity(non_linearity)
 
@@ -152,6 +171,14 @@ class ConvResFunc(nn.Module):
 
 class ConvResUNet(nn.Module):
     def __init__(self, num_filters, output_dim=1, non_linearity='softplus'):
+        """
+        ConvResUNet (U-Node in paper)
+
+        Args:
+            num_filters (int): number of filters for first conv layer
+            output_dim (int): how many feature maps the network outputs
+            non_linearity (str): which non_linearity to use (for options see get_nonlinearity)
+        """
         super(ConvResUNet, self).__init__()
         self.output_dim = output_dim
 
@@ -227,26 +254,42 @@ class ConvResUNet(nn.Module):
 
 
 class ConvBlock(nn.Sequential):
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_channels, out_channels):
+        """
+        Block for LevelBlock
+
+        Args:
+            in_channels (int): number of input filters for first conv layer
+            out_channels (int): number of output filters for the last layer
+        """
         super().__init__(
-            nn.Conv2d(in_ch, out_ch, 3), nn.ReLU(inplace=True),
-            nn.Conv2d(out_ch, out_ch, 3), nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels, out_channels, 3), nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, 3), nn.ReLU(inplace=True),
         )
 
 class LevelBlock(nn.Module):
-    def __init__(self, depth, total_depth, in_ch, out_ch):
+    def __init__(self, depth, total_depth, in_channels, out_channels):
+        """
+        Block for UNet
+
+        Args:
+            depth (int): current depth of blocks (starts with total_depth: n,...,0)
+            total_depth (int): total_depth of U-Net
+            in_channels (int): number of input filters for first conv layer
+            out_channels (int): number of output filters for the last layer
+        """
         super(LevelBlock, self).__init__()
         self.depth = depth
         self.total_depth = total_depth
         if depth > 1:
-            self.encode = ConvBlock(in_ch, out_ch)
+            self.encode = ConvBlock(in_channels, out_channels)
             self.down = nn.MaxPool2d(2, 2)
-            self.next = LevelBlock(depth - 1, total_depth, out_ch, out_ch * 2)
+            self.next = LevelBlock(depth - 1, total_depth, out_channels, out_channels * 2)
             next_out = list(self.next.modules())[-2].out_channels
             self.up = nn.ConvTranspose2d(next_out, next_out // 2, 2, 2)
-            self.decode = ConvBlock(next_out // 2 + out_ch, out_ch)
+            self.decode = ConvBlock(next_out // 2 + out_channels, out_channels)
         else:
-            self.embed = ConvBlock(in_ch, out_ch)
+            self.embed = ConvBlock(in_channels, out_channels)
 
     def forward(self, inp):
         if self.depth > 1:
@@ -275,12 +318,20 @@ class LevelBlock(nn.Module):
         return x
 
 class Unet(nn.Module):
-    def __init__(self, depth, in_ch, out_ch, n_classes):
+    def __init__(self, depth, num_filters, output_dim):
+        """
+        Unet
+
+        Args:
+            depth (int): number of levels of UNet
+            num_filters (int): number of filters for first conv layer
+            output_dim (int): how many feature maps the network outputs
+        """
         super(Unet, self).__init__()
 
-        self.main = LevelBlock(depth, depth, in_ch, out_ch)
+        self.main = LevelBlock(depth, depth, 3, num_filters)
         main_out = list(self.main.modules())[-2].out_channels
-        self.out = nn.Conv2d(main_out, n_classes, 1)
+        self.out = nn.Conv2d(main_out, output_dim, 1)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -290,19 +341,3 @@ class Unet(nn.Module):
     def forward(self, inp):
         x = self.main(inp)
         return self.out(x)
-
-
-class ConvFunc(nn.Module):
-    def __init__(self, nf, non_linearity='relu'):
-        super(ConvResFunc, self).__init__()
-        self.conv1 = nn.Conv2d(nf, nf, kernel_size=3, stride=1)
-        self.conv2 = nn.Conv2d(nf, nf, kernel_size=3, stride=1)
-        self.non_linearity = get_nonlinearity(non_linearity)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = self.non_linearity(out)
-        out = self.conv2(out)
-        out = self.non_linearity(out)
-        return out
-
