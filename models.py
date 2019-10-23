@@ -1,4 +1,4 @@
-from utils import Conv2dTime, ODEBlock, get_nonlinearity
+from model_utils import Conv2dTime, ODEBlock, get_nonlinearity
 
 import torch
 import torch.nn as nn
