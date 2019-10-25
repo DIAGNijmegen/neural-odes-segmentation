@@ -30,6 +30,7 @@ This reposity contains the code to reproduce the experiments from our paper.
 - matplotlib
 - scikit-image
 - scipy
+- [torchdiffeq](https://github.com/rtqichen/torchdiffeq)
 
 ## Models
 
