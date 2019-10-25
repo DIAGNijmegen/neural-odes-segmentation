@@ -20,6 +20,8 @@ This reposity contains the code to reproduce the experiments from our paper.
 
 [ArXiv link](https://arxiv.org/abs/1910.10470)
 
+[Google Colab notebook](https://colab.research.google.com/drive/1JPuZhHWTWIlAnwdarFDhYYrHSt4YXK0C#forceEdit=true&sandboxMode=true) (please note: training is quite slow on Google Colab.)
+
 ## Requirements
 
 - pytorch
