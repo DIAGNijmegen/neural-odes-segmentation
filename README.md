@@ -18,7 +18,7 @@ This reposity contains the code to reproduce the experiments from our paper.
 
 **Tip: start with [the notebook](train_models.ipynb)**
 
-[ArXiv link]()
+[ArXiv link](https://arxiv.org/abs/1910.10470)
 
 ## Requirements
 
