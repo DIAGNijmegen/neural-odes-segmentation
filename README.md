@@ -1,4 +1,4 @@
-# Neural Ordinary Differential Equations for Semantic Segmentation
+# Neural Ordinary Differential Equations for Semantic Segmentation of Individual Colon Glands
 
 *Accepted to Medical Imaging meets NeurIPS workshop at NeurIPS 2019*
 
