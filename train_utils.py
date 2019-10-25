@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-import matplotlib.pyplt as plt
+import matplotlib.pyplot as plt
 
 def plot_losses(inputs, outputs, losses, val_losses, title, nfe=None, net=None):
     # plot statistics
