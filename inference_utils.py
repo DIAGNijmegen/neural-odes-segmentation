@@ -48,7 +48,7 @@ def evaluate_image(net, image, test_time_augmentation=True, shouldpad=False):
             image = padded_np_image[0:704, 0:704]
 
         def _eval_img(img):
-            torch_image = torch.from_numpy(transposed_image).float()
+            torch_image = torch.from_numpy(img).float()
             result = net(torch_image[None].cuda())
             soft_result = torch.sigmoid(result)[0].cpu()
             soft_result_np = soft_result.detach().numpy().transpose(1, 2, 0)

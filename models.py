@@ -4,39 +4,50 @@ import torch
 import torch.nn as nn
 
 
+
 class ConvODEFunc(nn.Module):
-    def __init__(self, num_filters, time_dependent=False, non_linearity='relu'):
+    def __init__(self, nf, time_dependent=False, non_linearity='relu'):
         """
         Block for ConvODEUNet
 
         Args:
-            num_filters (int): number of filters for the conv layers
+            nf (int): number of filters for the conv layers
             time_dependent (bool): whether to concat the time as a feature map before the convs
             non_linearity (str): which non_linearity to use (for options see get_nonlinearity)
         """
         super(ConvODEFunc, self).__init__()
-        nf = num_filters
         self.time_dependent = time_dependent
         self.nfe = 0  # Number of function evaluations
 
-        self.norm = nn.InstanceNorm2d(nf)
         if time_dependent:
+            self.norm1 = nn.InstanceNorm2d(nf)
             self.conv1 = Conv2dTime(nf, nf, kernel_size=3, stride=1, padding=1)
+            self.norm2 = nn.InstanceNorm2d(nf)
             self.conv2 = Conv2dTime(nf, nf, kernel_size=3, stride=1, padding=1)
         else:
+            self.norm1 = nn.InstanceNorm2d(nf)
             self.conv1 = nn.Conv2d(nf, nf, kernel_size=3, stride=1, padding=1)
-            self.conv2 = nn.Conv2d(nf, nf, kernel_size=3, stride=1, padding=1)
+            self.norm2 = nn.InstanceNorm2d(nf)
+            self.conv2 = nn.Conv2d(nf, nf, kernel_size=1, stride=1, padding=1)
 
         self.non_linearity = get_nonlinearity(non_linearity)
 
     def forward(self, t, x):
         self.nfe += 1
-        out = self.norm(x)
-        out = self.conv1(t, out) if self.time_dependent else self.conv1(out)
-        out = self.non_linearity(out)
-        out = self.norm(out)
-        out = self.conv2(t, out) if self.time_dependent else self.conv2(out)
-        out = self.non_linearity(out)
+        if self.time_dependent:
+            out = self.norm1(x)
+            out = self.conv1(t, x)
+            out = self.non_linearity(out)
+            out = self.norm2(out)
+            out = self.conv2(t, out)
+            out = self.non_linearity(out)
+        else:
+            out = self.norm1(x)
+            out = self.conv1(out)
+            out = self.non_linearity(out)
+            out = self.norm2(out)
+            out = self.conv2(out)
+            out = self.non_linearity(out)
         return out
 
 class ConvODEUNet(nn.Module):
@@ -140,7 +151,6 @@ class ConvODEUNet(nn.Module):
 
         pred = self.classifier(x)
         return pred
-
 
 class ConvResFunc(nn.Module):
     def __init__(self, num_filters, non_linearity='relu'):
